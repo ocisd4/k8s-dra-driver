@@ -149,6 +149,10 @@ spec:
         {{- with .Values.kubeletPlugin.containers.gpus.env }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+        {{- if .Values.deviceConfig.enabled }}
+        - name: DEVICE_CONFIG_FILE
+          value: /config/device-config.json
+        {{- end }}
         volumeMounts:
         - name: plugins-registry
           mountPath: {{ .Values.kubeletPlugin.kubeletRegistrarDirectoryPath | quote }}
@@ -164,6 +168,11 @@ spec:
           mountPath: {{ .Values.driver.vgpuInitPath | quote }}
         - name: host-tmp
           mountPath: {{ .Values.driver.hostTmp | quote }}
+        {{- if .Values.deviceConfig.enabled }}
+        - name: device-config
+          mountPath: /config
+          readOnly: true
+        {{- end }}
         {{- if and .Values.featureGates (and (hasKey .Values.featureGates "PassthroughSupport") .Values.featureGates.PassthroughSupport) }}
         - name: host-root
           mountPath: /host-root
@@ -209,6 +218,11 @@ spec:
         hostPath:
           path: {{ .Values.driver.hostTmp | quote }}
           type: ""
+      {{- if .Values.deviceConfig.enabled }}
+      - name: device-config
+        configMap:
+          name: {{ include "hami-dra-driver.name" . }}-device-config
+      {{- end }}
       {{- if and .Values.featureGates (and (hasKey .Values.featureGates "PassthroughSupport") .Values.featureGates.PassthroughSupport) }}
       - name: host-root
         hostPath:

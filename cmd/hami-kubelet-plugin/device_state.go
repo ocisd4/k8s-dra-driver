@@ -78,7 +78,21 @@ func NewDeviceState(ctx context.Context, config *Config) (*DeviceState, error) {
 	devRoot := containerDriverRoot.getDevRoot()
 	klog.Infof("Using devRoot=%v", devRoot)
 
-	nvdevlib, err := newDeviceLib(containerDriverRoot)
+	// Load optional per-node device config (e.g. preConfiguredDeviceMemoryMB for
+	// unified memory GPUs where NVML GetMemoryInfo returns ERROR_NOT_SUPPORTED).
+	var preConfiguredDeviceMemoryBytes uint64
+	if config.flags.deviceConfigFile != "" {
+		if pluginCfg, err := loadDevicePluginConfig(config.flags.deviceConfigFile); err != nil {
+			klog.Warningf("Failed to load device config file %q, continuing without it: %v", config.flags.deviceConfigFile, err)
+		} else {
+			preConfiguredDeviceMemoryBytes = resolvePreConfiguredDeviceMemoryBytes(pluginCfg, config.flags.nodeName)
+			if preConfiguredDeviceMemoryBytes > 0 {
+				klog.Infof("Node %q: using pre-configured device memory %d bytes (%d MiB)", config.flags.nodeName, preConfiguredDeviceMemoryBytes, preConfiguredDeviceMemoryBytes/1024/1024)
+			}
+		}
+	}
+
+	nvdevlib, err := newDeviceLib(containerDriverRoot, preConfiguredDeviceMemoryBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create device library: %w", err)
 	}

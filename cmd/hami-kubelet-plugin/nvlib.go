@@ -67,12 +67,16 @@ type deviceLib struct {
 	gpuInfosByUUID    map[string]*GpuInfo
 	gpuUUIDbyMinor    map[GPUMinor]string
 	devhandleByUUID   map[string]nvml.Device
+	// preConfiguredDeviceMemoryBytes is the fallback total GPU memory used when
+	// NVML GetMemoryInfo returns ERROR_NOT_SUPPORTED (unified memory GPUs).
+	// 0 means no fallback is configured.
+	preConfiguredDeviceMemoryBytes uint64
 }
 
 type GPUMinor = int
 type PerGPUMinorAllocatableDevices map[GPUMinor]AllocatableDevices
 
-func newDeviceLib(driverRoot root) (*deviceLib, error) {
+func newDeviceLib(driverRoot root, preConfiguredDeviceMemoryBytes uint64) (*deviceLib, error) {
 	driverLibraryPath, err := driverRoot.getDriverLibraryPath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to locate driver libraries: %w", err)
@@ -91,15 +95,16 @@ func newDeviceLib(driverRoot root) (*deviceLib, error) {
 	nvpci := nvpci.New()
 
 	d := deviceLib{
-		Interface:         nvdev.New(nvmllib),
-		nvmllib:           nvmllib,
-		driverLibraryPath: driverLibraryPath,
-		devRoot:           driverRoot.getDevRoot(),
-		nvidiaSMIPath:     nvidiaSMIPath,
-		nvpci:             nvpci,
-		gpuInfosByUUID:    make(map[string]*GpuInfo),
-		gpuUUIDbyMinor:    make(map[GPUMinor]string),
-		devhandleByUUID:   make(map[string]nvml.Device),
+		Interface:                      nvdev.New(nvmllib),
+		nvmllib:                        nvmllib,
+		driverLibraryPath:              driverLibraryPath,
+		devRoot:                        driverRoot.getDevRoot(),
+		nvidiaSMIPath:                  nvidiaSMIPath,
+		nvpci:                          nvpci,
+		gpuInfosByUUID:                 make(map[string]*GpuInfo),
+		gpuUUIDbyMinor:                 make(map[GPUMinor]string),
+		devhandleByUUID:                make(map[string]nvml.Device),
+		preConfiguredDeviceMemoryBytes: preConfiguredDeviceMemoryBytes,
 	}
 
 	// Current design: when DynamicMIG is enabled, use one long-lived NVML
@@ -465,7 +470,18 @@ func (l deviceLib) getGpuInfo(index int, device nvdev.Device) (*GpuInfo, error) 
 		return nil, fmt.Errorf("error checking if MIG mode enabled for device %d: %w", index, err)
 	}
 	memory, ret := device.GetMemoryInfo()
-	if ret != nvml.SUCCESS {
+	switch ret {
+	case nvml.SUCCESS:
+	case nvml.ERROR_NOT_SUPPORTED:
+		// Unified memory GPUs (e.g. NVIDIA GB10/DGX Spark) share memory between
+		// CPU and GPU; NVML reports ERROR_NOT_SUPPORTED for GetMemoryInfo.
+		// Use the operator-supplied preConfiguredDeviceMemoryMB as the total.
+		if l.preConfiguredDeviceMemoryBytes == 0 {
+			return nil, fmt.Errorf("error getting memory info for device %d: %v (set preConfiguredDeviceMemoryMB in device config for unified memory GPUs)", index, ret)
+		}
+		klog.Warningf("GetMemoryInfo not supported for device %d (unified memory architecture); using pre-configured %d bytes", index, l.preConfiguredDeviceMemoryBytes)
+		memory = nvml.Memory{Total: l.preConfiguredDeviceMemoryBytes}
+	default:
 		return nil, fmt.Errorf("error getting memory info for device %d: %v", index, ret)
 	}
 	productName, ret := device.GetName()

@@ -60,6 +60,7 @@ type Flags struct {
 	healthcheckPort               int
 	klogVerbosity                 int
 	additionalXidsToIgnore        string
+	deviceConfigFile              string
 }
 
 type Config struct {
@@ -153,6 +154,13 @@ func newApp() *cli.App {
 			Value:       -1,
 			Destination: &flags.healthcheckPort,
 			EnvVars:     []string{"HEALTHCHECK_PORT"},
+		},
+		&cli.StringFlag{
+			Name:        "device-config-file",
+			Usage:       "Path to the device plugin config file mounted from a ConfigMap. Used for per-node settings such as preConfiguredDeviceMemoryMB for unified memory GPUs (e.g. NVIDIA GB10/DGX Spark) where NVML GetMemoryInfo returns ERROR_NOT_SUPPORTED.",
+			Value:       "/config/device-config.json",
+			Destination: &flags.deviceConfigFile,
+			EnvVars:     []string{"DEVICE_CONFIG_FILE"},
 		},
 		// TODO: change to StringSliceFlag.
 		&cli.StringFlag{

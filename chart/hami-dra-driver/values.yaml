@@ -78,6 +78,25 @@ featureGates: {}
 # 0 = errors/warnings/info only; higher numbers increase verbosity.
 logVerbosity: "4"
 
+# Device plugin configuration. When enabled, a ConfigMap is created and mounted
+# into the DaemonSet at /config/device-config.json, allowing per-node settings.
+deviceConfig:
+  # Set to true to create the ConfigMap and mount it into the plugin container.
+  enabled: false
+  # Global fallback GPU memory in MiB for nodes where NVML GetMemoryInfo returns
+  # ERROR_NOT_SUPPORTED (e.g. unified memory GPUs like NVIDIA GB10/DGX Spark).
+  # 0 = disabled (default). Per-node entries in nodeConfig take priority.
+  preConfiguredDeviceMemoryMB: 0
+  # Per-node overrides. Each entry must have a 'name' matching the Kubernetes
+  # node name and a 'preConfiguredDeviceMemoryMB' value.
+  # Example:
+  #   nodeConfig:
+  #     - name: dgx-spark-node-1
+  #       preConfiguredDeviceMemoryMB: 131072   # 128 GiB
+  #     - name: dgx-spark-node-2
+  #       preConfiguredDeviceMemoryMB: 131072
+  nodeConfig: []
+
 kubeletPlugin:
   priorityClassName: "system-node-critical"
   updateStrategy:

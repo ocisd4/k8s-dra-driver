@@ -1,0 +1,16 @@
+{{- if .Values.deviceConfig.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hami-dra-driver.name" . }}-device-config
+  namespace: {{ include "hami-dra-driver.namespace" . }}
+  labels:
+    {{- include "hami-dra-driver.labels" . | nindent 4 }}
+data:
+  device-config.json: |
+    {
+      "preConfiguredDeviceMemoryMB": {{ .Values.deviceConfig.preConfiguredDeviceMemoryMB | default 0 }},
+      "nodeConfig": {{ .Values.deviceConfig.nodeConfig | toJson }}
+    }
+{{- end }}
